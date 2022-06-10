@@ -5,13 +5,26 @@
 #include "framework.h"
 #include "PathFinder.h"
 
+#include <queue>
+#include <unordered_map>
+#include <functional>
+
+#include "eAttribute.h"
+#include "Node.h"
+#include "Candidate.h"
+#include "AStar.h"
+
 #define NUM_ROWS (50)
 #define NUM_COLUMNS (100)
 #define GRID_SIZE (16)
 
+
+AStar gPathFinder;
+
 HINSTANCE hInst;
 HPEN hGridPen;
 HBRUSH hTileBrush;
+
 
 char gTile[NUM_ROWS][NUM_COLUMNS];
 
