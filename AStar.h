@@ -6,12 +6,20 @@ public:
 	AStar();
 	~AStar();
 
+	Node* GetEndPoint();
+	Node* GetStartPoint();
+	Node* GetNodeOrNull(int x, int y);
+	float GetDistance(Node* from, Node* to);
+
 	void SetAttribute(int x, int y, eAttribute attribute);
+
 	bool Ready();
 	void DoNextStep();
-	void Render();
-	void Clear();
+
 	bool IsEnd();
+	bool IsFindPath();
+
+	std::unordered_map<Node*, Node*>& GetPath();
 private:
 	enum { WIDTH = 100, HEIGHT = 50 };
 

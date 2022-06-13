@@ -1,3 +1,5 @@
+#include <vector>
+
 #include "eAttribute.h"
 #include "Node.h"
 #include "Candidate.h"
@@ -19,7 +21,7 @@ float Candidate::GetDistance() const
     return mG;
 }
 
-bool Candidate::operator<(const Candidate& other) const
+bool Candidate::operator>(const Candidate& other) const
 {
-    return mG + mH < other.mG + other.mH;
+    return mG + mH > other.mG + other.mH;
 }

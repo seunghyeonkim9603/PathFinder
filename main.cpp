@@ -6,6 +6,7 @@
 #include "PathFinder.h"
 
 #include <queue>
+#include <vector>
 #include <unordered_map>
 #include <functional>
 
@@ -17,16 +18,19 @@
 #define NUM_ROWS (50)
 #define NUM_COLUMNS (100)
 #define GRID_SIZE (16)
-
+#define WM_RUN_ASTAR (WM_USER + 1)
 
 AStar gPathFinder;
+bool gbIsReady;
 
 HINSTANCE hInst;
 HPEN hGridPen;
+HPEN hPathPen;
 HBRUSH hTileBrush;
-
-
-char gTile[NUM_ROWS][NUM_COLUMNS];
+HBRUSH hOpenBrush;
+HBRUSH hCloseBrush;
+HBRUSH hStartBrush;
+HBRUSH hEndBrush;
 
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
@@ -48,7 +52,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	wcex.cbSize = sizeof(WNDCLASSEX);
 
-	wcex.style = CS_HREDRAW | CS_VREDRAW;
+	wcex.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
 	wcex.lpfnWndProc = WndProc;
 	wcex.cbClsExtra = 0;
 	wcex.cbWndExtra = 0;
@@ -111,25 +115,42 @@ void RenderGrid(HDC hdc)
 
 void RenderObstacle(HDC hdc)
 {
-	HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hTileBrush);
+	for (int row = 0; row < NUM_ROWS; ++row)
 	{
-		SelectObject(hdc, GetStockObject(NULL_PEN));
-		for (int row = 0; row < NUM_ROWS; ++row)
+		for (int column = 0; column < NUM_COLUMNS; ++column)
 		{
-			char* line = gTile[row];
-			for (int column = 0; column < NUM_COLUMNS; ++column)
-			{
-				if (line[column])
-				{
-					int x = column * GRID_SIZE;
-					int y = row * GRID_SIZE;
+			Node* node = gPathFinder.GetNodeOrNull(column, row);
+			int x = column * GRID_SIZE;
+			int y = row * GRID_SIZE;
 
-					Rectangle(hdc, x, y, x + GRID_SIZE + 2, y + GRID_SIZE + 2);
-				}
+			if (node->GetAttribute() == eAttribute::Road)
+			{
+				continue;
 			}
+			HBRUSH brush = hTileBrush;
+
+			switch (node->GetAttribute())
+			{
+			case eAttribute::StartPoint:
+				brush = hStartBrush;
+				break;
+			case eAttribute::EndPoint:
+				brush = hEndBrush;
+				break;
+			case eAttribute::Open:
+				brush = hOpenBrush;
+				break;
+			case eAttribute::Close:
+				brush = hCloseBrush;
+				break;
+			default:
+				break;
+			}
+			HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, (HGDIOBJ)brush);
+			Rectangle(hdc, x, y, x + GRID_SIZE + 2, y + GRID_SIZE + 2);
+			SelectObject(hdc, hOldBrush);
 		}
 	}
-	SelectObject(hdc, hOldBrush);
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -141,8 +162,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_CREATE:
 	{
+		SetTimer(hWnd, 1, 10, nullptr);
 		hGridPen = CreatePen(PS_SOLID, 1, RGB(200, 200, 200));
+		hPathPen = CreatePen(PS_SOLID, 1, RGB(255, 0, 0));
 		hTileBrush = CreateSolidBrush(RGB(100, 100, 100));
+		hOpenBrush = CreateSolidBrush(RGB(153, 204, 255));
+		hCloseBrush = CreateSolidBrush(RGB(255, 255, 51));
+		hStartBrush = CreateSolidBrush(RGB(102, 255, 102));
+		hEndBrush = CreateSolidBrush(RGB(255, 178, 102));
+	}
+	break;
+	case WM_LBUTTONDBLCLK:
+	{
+		int x = GET_X_LPARAM(lParam) / GRID_SIZE;
+		int y = GET_Y_LPARAM(lParam) / GRID_SIZE;
+
+		if (NUM_ROWS <= y || NUM_COLUMNS <= x)
+		{
+			break;
+		}
+		gPathFinder.SetAttribute(x, y, eAttribute::StartPoint);
+		InvalidateRect(hWnd, nullptr, false);
+	}
+	break;
+	case WM_RBUTTONDOWN:
+	{
+		int x = GET_X_LPARAM(lParam) / GRID_SIZE;
+		int y = GET_Y_LPARAM(lParam) / GRID_SIZE;
+
+		if (NUM_ROWS <= y || NUM_COLUMNS <= x)
+		{
+			break;
+		}
+		gPathFinder.SetAttribute(x, y, eAttribute::EndPoint);
+		InvalidateRect(hWnd, nullptr, false);
 	}
 	break;
 	case WM_LBUTTONDOWN:
@@ -155,7 +208,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		{
 			break;
 		}
-		if (gTile[y][x] == 1)
+		Node* node = gPathFinder.GetNodeOrNull(x, y);
+		if (node->GetAttribute() != eAttribute::Road)
 		{
 			isErase = true;
 		}
@@ -181,9 +235,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			{
 				break;
 			}
-			gTile[y][x] = !isErase;
+			if (isErase)
+			{
+				gPathFinder.SetAttribute(x, y, eAttribute::Road);
+			}
+			else
+			{
+				gPathFinder.SetAttribute(x, y, eAttribute::Wall);
+			}
 			InvalidateRect(hWnd, nullptr, false);
 		}
+	}
+	break;
+	case WM_KEYDOWN:
+	{
+		if (wParam == VK_SPACE)
+		{
+			if (gPathFinder.Ready())
+			{
+				gbIsReady = true;
+			}
+		}
+	}
+	break;
+	case WM_TIMER:
+	{
+		if (gPathFinder.IsEnd())
+		{
+			gbIsReady = false;
+			break;
+		}
+		gPathFinder.DoNextStep();
+		InvalidateRect(hWnd, nullptr, false);
 	}
 	break;
 	case WM_COMMAND:
@@ -217,6 +300,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 			RenderGrid(hBuffer);
 			RenderObstacle(hBuffer);
+			if (gPathFinder.IsFindPath())
+			{
+				HPEN hOldPen = (HPEN)SelectObject(hBuffer, hPathPen);
+
+				Node* from = gPathFinder.GetEndPoint();
+				auto path = gPathFinder.GetPath();
+
+				Node* to = path[from];
+				while (to != nullptr)
+				{
+					int fromX = from->GetX() * GRID_SIZE + 8;
+					int fromY = from->GetY() * GRID_SIZE + 8;
+					int toX = to->GetX() * GRID_SIZE + 8;
+					int toY = to->GetY() * GRID_SIZE + 8;
+					MoveToEx(hBuffer, fromX, fromY, nullptr);
+					LineTo(hBuffer, toX, toY);
+					from = to;
+					to = path[from];
+				}
+				SelectObject(hBuffer, hOldPen);
+			}
 			BitBlt(hdc, 0, 0, rect.right, rect.bottom, hBuffer, 0, 0, SRCCOPY);
 
 			SelectObject(hBuffer, hBmpOldBuffer);
@@ -230,6 +334,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		PostQuitMessage(0);
 		DeleteObject(hGridPen);
 		DeleteObject(hTileBrush);
+		DeleteObject(hOpenBrush);
+		DeleteObject(hCloseBrush);
+		DeleteObject(hStartBrush);
+		DeleteObject(hEndBrush);
 		break;
 	default:
 		return DefWindowProc(hWnd, message, wParam, lParam);

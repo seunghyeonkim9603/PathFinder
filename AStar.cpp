@@ -1,6 +1,8 @@
 #include <queue>
+#include <vector>
 #include <unordered_map>
 #include <functional>
+#include <cmath>
 
 #include "eAttribute.h"
 #include "Node.h"
@@ -10,7 +12,7 @@
 AStar::AStar()
 	:	mStartPoint(nullptr),
 		mEndPoint(nullptr),
-		mbIsFindPath(true)
+		mbIsFindPath(false)
 {
 	for (int row = 0; row < HEIGHT; ++row)
 	{
@@ -21,6 +23,14 @@ AStar::AStar()
 			node->SetX(col);
 			node->SetY(row);
 			node->SetAttribute(eAttribute::Road);
+			node->AddRoad(GetNodeOrNull(col - 1, row));
+			node->AddRoad(GetNodeOrNull(col, row - 1));
+			node->AddRoad(GetNodeOrNull(col - 1, row - 1));
+			node->AddRoad(GetNodeOrNull(col + 1, row));
+			node->AddRoad(GetNodeOrNull(col, row + 1));
+			node->AddRoad(GetNodeOrNull(col + 1, row + 1));
+			node->AddRoad(GetNodeOrNull(col + 1, row - 1));
+			node->AddRoad(GetNodeOrNull(col - 1, row + 1));
 		}
 	}
 }
@@ -29,19 +39,50 @@ AStar::~AStar()
 {
 }
 
+Node* AStar::GetNodeOrNull(int x, int y)
+{
+	if (x < 0 || WIDTH <= x || y < 0 || HEIGHT <= y)
+	{
+		return nullptr;
+	}
+	return &mNodes[y][x];
+}
+
+Node* AStar::GetStartPoint()
+{
+	return mStartPoint;
+}
+
+Node* AStar::GetEndPoint()
+{
+	return mEndPoint;
+}
+
+std::unordered_map<Node*, Node*>& AStar::GetPath()
+{
+	return mPath;
+}
+
 void AStar::SetAttribute(int x, int y, eAttribute attribute)
 {
 	Node* node = &mNodes[y][x];
 
-	if (attribute == eAttribute::StartPoint && mStartPoint != nullptr)
+	if (attribute == eAttribute::StartPoint)
 	{
-		mStartPoint->SetAttribute(eAttribute::Road);
+		if (mStartPoint != nullptr)
+		{
+			mStartPoint->SetAttribute(eAttribute::Road);
+		}
+		mStartPoint = node;
 	}
-	else if (attribute == eAttribute::EndPoint && mEndPoint != nullptr)
+	else if (attribute == eAttribute::EndPoint)
 	{
-		mEndPoint->SetAttribute(eAttribute::Road);
+		if (mEndPoint != nullptr)
+		{
+			mEndPoint->SetAttribute(eAttribute::Road);
+		}
+		mEndPoint = node;
 	}
-
 	node->SetAttribute(attribute);
 }
 
@@ -52,18 +93,28 @@ bool AStar::Ready()
 		return false;
 	}
 
+	mMinDists.clear();
+	mPath.clear();
+	mOpen = std::priority_queue<Candidate, std::vector<Candidate>, std::greater<Candidate>>();
+
 	for (int row = 0; row < HEIGHT; ++row)
 	{
 		for (int col = 0; col < WIDTH; ++col)
 		{
 			Node* node = &mNodes[row][col];
+			eAttribute attribute = node->GetAttribute();
 
 			mMinDists.insert({ node, FLT_MAX });
+
+			if (attribute == eAttribute::Open || attribute == eAttribute::Close)
+			{
+				node->SetAttribute(eAttribute::Road);
+			}
 		}
 	}
 	mbIsFindPath = false;
-	mMinDists.insert({ mStartPoint, 0 });
-	mPath.insert({ mStartPoint, nullptr });
+	mMinDists[mStartPoint] = 0;
+	mPath[mStartPoint] = nullptr;
 	mOpen.push(Candidate(mStartPoint, 0, mStartPoint->GetDistance(*mEndPoint)));
 
 	return true;
@@ -79,7 +130,10 @@ void AStar::DoNextStep()
 	mOpen.pop();
 
 	Node* openNode = candidate.GetNode();
-	openNode->SetAttribute(eAttribute::Close);
+	if (openNode != mStartPoint)
+	{
+		openNode->SetAttribute(eAttribute::Close);
+	}
 
 	float minDist = mMinDists.at(openNode);
 	float dist = candidate.GetDistance();
@@ -93,6 +147,10 @@ void AStar::DoNextStep()
 
 	for (Node* next : roads)
 	{
+		if (next->GetAttribute() == eAttribute::Wall)
+		{
+			continue;
+		}
 		float newDist = dist + next->GetDistance(*openNode);
 		float nextMinDist = mMinDists.at(next);
 
@@ -100,37 +158,15 @@ void AStar::DoNextStep()
 		{
 			continue;
 		}
-
-		mMinDists.insert({ next, newDist });
-		mPath.insert({ next, openNode });
+		mMinDists[next] = newDist;
+		mPath[next] = openNode;
 		if (next == mEndPoint)
 		{
 			mbIsFindPath = true;
 			return;
 		}
-
-		mOpen.push(Candidate(next, newDist, next->GetDistance(*mEndPoint)));
-	}
-}
-
-void AStar::Render()
-{
-}
-
-void AStar::Clear()
-{
-	mMinDists.clear();
-	mPath.clear();
-	mOpen = std::priority_queue<Candidate, std::vector<Candidate>, std::greater<Candidate>>();
-
-	for (int row = 0; row < HEIGHT; ++row)
-	{
-		for (int col = 0; col < WIDTH; ++col)
-		{
-			Node* node = &mNodes[row][col];
-
-			node->SetAttribute(eAttribute::Road);
-		}
+		next->SetAttribute(eAttribute::Open);
+		mOpen.push(Candidate(next, newDist, GetDistance(next, mEndPoint)));
 	}
 }
 
@@ -141,4 +177,17 @@ bool AStar::IsEnd()
 		return true;
 	}
 	return false;
+}
+
+bool AStar::IsFindPath()
+{
+	return mbIsFindPath;
+}
+
+float AStar::GetDistance(Node* from, Node* to)
+{
+	int x = abs(from->GetX() - to->GetX());
+	int y = abs(from->GetY() - to->GetY());
+
+	return x + y;
 }

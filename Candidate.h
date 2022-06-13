@@ -9,7 +9,7 @@ public:
 	Node* GetNode();
 	float GetDistance() const;
 
-	bool operator<(const Candidate& other) const;
+	bool operator>(const Candidate& other) const;
 private:
 	Node* mNode;
 	float mG;

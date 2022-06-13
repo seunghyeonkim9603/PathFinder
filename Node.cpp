@@ -49,6 +49,10 @@ float Node::GetDistance(const Node& to) const
 
 void Node::AddRoad(Node* node)
 {
+    if (node == nullptr)
+    {
+        return;
+    }
     mRoads.push_back(node);
 }
 
