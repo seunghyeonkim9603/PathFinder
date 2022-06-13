@@ -115,7 +115,7 @@ bool AStar::Ready()
 	mbIsFindPath = false;
 	mMinDists[mStartPoint] = 0;
 	mPath[mStartPoint] = nullptr;
-	mOpen.push(Candidate(mStartPoint, 0, mStartPoint->GetDistance(*mEndPoint)));
+	mOpen.push(Candidate(mStartPoint, 0, GetDistance(mStartPoint, mEndPoint)));
 
 	return true;
 }
@@ -130,6 +130,13 @@ void AStar::DoNextStep()
 	mOpen.pop();
 
 	Node* openNode = candidate.GetNode();
+	while (mMinDists[openNode] != candidate.GetDistance())
+	{
+		candidate = mOpen.top();
+		mOpen.pop();
+		openNode = candidate.GetNode();
+	}
+
 	if (openNode != mStartPoint)
 	{
 		openNode->SetAttribute(eAttribute::Close);
@@ -147,7 +154,9 @@ void AStar::DoNextStep()
 
 	for (Node* next : roads)
 	{
-		if (next->GetAttribute() == eAttribute::Wall)
+		eAttribute nextAtrribute = next->GetAttribute();
+
+		if (nextAtrribute == eAttribute::Wall || nextAtrribute == eAttribute::Close)
 		{
 			continue;
 		}
