@@ -3,6 +3,7 @@
 class Candidate final
 {
 public:
+	Candidate() = default;
 	Candidate(Node* node, float g, float h);
 	~Candidate() = default;
 

@@ -130,24 +130,24 @@ void AStar::DoNextStep()
 	mOpen.pop();
 
 	Node* openNode = candidate.GetNode();
-	while (mMinDists[openNode] != candidate.GetDistance())
+
+	float minDist = mMinDists[openNode];
+	float dist = candidate.GetDistance();
+
+	while (minDist < dist)
 	{
 		candidate = mOpen.top();
 		mOpen.pop();
+
 		openNode = candidate.GetNode();
+
+		minDist = mMinDists[openNode];
+		dist = candidate.GetDistance();
 	}
 
 	if (openNode != mStartPoint)
 	{
 		openNode->SetAttribute(eAttribute::Close);
-	}
-
-	float minDist = mMinDists.at(openNode);
-	float dist = candidate.GetDistance();
-	
-	if (minDist < dist)
-	{
-		return;
 	}
 
 	std::vector<Node*>& roads = openNode->GetRoads();
